@@ -1,23 +1,23 @@
-import db from '../config/db.js';
+import { CommunityInfo, User, Resource, Transaction } from '../models/index.js';
 import { safeJsonParse } from '../utils/helpers.js';
 
 export const communityController = {
   // GET /api/community
   getInfo: async (req, res, next) => {
     try {
-      const { rows } = await db.query(`SELECT * FROM community_info LIMIT 1`);
+      const info = await CommunityInfo.findOne();
 
       // Dynamic counts from live DB
-      const { rows: userCount } = await db.query(`SELECT COUNT(*) as count FROM users`);
-      const { rows: resCount } = await db.query(`SELECT COUNT(*) as count FROM resources`);
-      const { rows: completedCount } = await db.query(`SELECT COUNT(*) as count FROM transactions WHERE status = 'COMPLETED'`);
+      const userCount = await User.countDocuments();
+      const resCount = await Resource.countDocuments();
+      const completedCount = await Transaction.countDocuments({ status: 'COMPLETED' });
 
-      const liveMembers = Math.max(1400, 1420 + parseInt(userCount[0]?.count || 0, 10));
-      const liveResources = Math.max(500, 580 + parseInt(resCount[0]?.count || 0, 10));
-      const liveExchanged = Math.max(400, 412 + parseInt(completedCount[0]?.count || 0, 10));
+      const liveMembers = Math.max(1400, 1420 + userCount);
+      const liveResources = Math.max(500, 580 + resCount);
+      const liveExchanged = Math.max(400, 412 + completedCount);
       const liveCo2 = parseFloat((liveExchanged * 3.1).toFixed(1));
 
-      if (rows.length === 0) {
+      if (!info) {
         return res.json({
           name: 'Assam Down Town University (ADTU) Resource Hub',
           tagline: 'Empowering students and faculty to share, reuse, and eliminate campus waste.',
@@ -32,9 +32,8 @@ export const communityController = {
         });
       }
 
-      const info = rows[0];
       return res.json({
-        id: info.id,
+        id: info._id,
         name: info.name,
         tagline: info.tagline,
         location: info.location,
@@ -43,8 +42,8 @@ export const communityController = {
         itemsExchangedOrDonated: liveExchanged,
         co2SavedKg: liveCo2,
         about: info.about,
-        announcements: safeJsonParse(info.announcements, []),
-        coordinators: safeJsonParse(info.coordinators, [])
+        announcements: Array.isArray(info.announcements) ? info.announcements : safeJsonParse(info.announcements, []),
+        coordinators: Array.isArray(info.coordinators) ? info.coordinators : safeJsonParse(info.coordinators, [])
       });
     } catch (err) {
       next(err);
@@ -52,3 +51,4 @@ export const communityController = {
   }
 };
 
+export default communityController;

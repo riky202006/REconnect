@@ -8,12 +8,14 @@ const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('reconnect_user');
-    return saved ? JSON.parse(saved) : mockCurrentUser;
+    const token = localStorage.getItem('reconnect_token');
+    return (saved && token) ? JSON.parse(saved) : null;
   });
 
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     const user = localStorage.getItem('reconnect_user');
-    return user ? true : true; // Initialized to active session for demo convenience
+    const token = localStorage.getItem('reconnect_token');
+    return Boolean(user && token);
   });
 
   // Verify and sync with backend on session start
@@ -26,8 +28,19 @@ export const AuthProvider = ({ children }) => {
           if (freshUser) {
             setCurrentUser(freshUser);
             setIsAuthenticated(true);
+          } else {
+            authService.logout();
+            setCurrentUser(null);
+            setIsAuthenticated(false);
           }
-        } catch (e) {}
+        } catch (e) {
+          authService.logout();
+          setCurrentUser(null);
+          setIsAuthenticated(false);
+        }
+      } else {
+        setCurrentUser(null);
+        setIsAuthenticated(false);
       }
     }
     syncCurrentUser();

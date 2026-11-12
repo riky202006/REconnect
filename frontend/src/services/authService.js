@@ -42,18 +42,15 @@ export const authService = {
 
   getCurrentUser: () => {
     const userStr = localStorage.getItem('reconnect_user');
-    return userStr ? JSON.parse(userStr) : mockCurrentUser;
+    return userStr ? JSON.parse(userStr) : null;
   },
 
   getMe: async () => {
-    try {
-      const res = await api.get('/auth/me');
-      if (res && res.user) {
-        localStorage.setItem('reconnect_user', JSON.stringify(res.user));
-        return res.user;
-      }
-    } catch (err) {
-      return authService.getCurrentUser();
+    const res = await api.get('/auth/me');
+    if (res && res.user) {
+      localStorage.setItem('reconnect_user', JSON.stringify(res.user));
+      return res.user;
     }
+    return null;
   }
 };

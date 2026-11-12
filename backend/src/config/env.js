@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load .env from server root
+// Load .env from backend root
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 export const env = {
@@ -13,8 +13,8 @@ export const env = {
   nodeEnv: process.env.NODE_ENV || 'development',
   jwtSecret: process.env.JWT_SECRET || 'reconnect_default_secret_campus_2026',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
-  dbType: process.env.DB_TYPE || 'auto',
-  databaseUrl: process.env.DATABASE_URL || '',
+  mongodbUri: process.env.MONGODB_URI || '',
   clientUrl: process.env.CLIENT_URL || 'http://localhost:3000'
 };
 
+export default env;

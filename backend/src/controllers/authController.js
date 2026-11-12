@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import db from '../config/db.js';
+import { User, Resource, Request, Transaction, UserBadge, RewardHistory } from '../models/index.js';
 import { generateToken } from '../utils/jwt.js';
 import { generateId } from '../utils/helpers.js';
 
@@ -7,77 +7,81 @@ import { generateId } from '../utils/helpers.js';
  * Helper to fetch a complete user object with dynamic stats, badges, and rewards history.
  */
 export async function getFullUserProfile(userId) {
-  const { rows: userRows } = await db.query(
-    `SELECT id, name, email, department, community, hostel, avatar, re_points, level, joined_date, rating, verified_student
-     FROM users WHERE id = $1`,
-    [userId]
-  );
+  const rawUser = await User.findById(userId);
+  if (!rawUser) return null;
 
-  if (userRows.length === 0) return null;
-  const rawUser = userRows[0];
+  // Dynamic stats calculated from related collections
+  const itemsSharedCount = await Transaction.countDocuments({
+    provider: userId,
+    status: 'COMPLETED'
+  });
 
-  // Dynamic stats
-  const { rows: sharedCount } = await db.query(
-    `SELECT COUNT(*) as count FROM transactions WHERE provider_id = $1 AND status = 'COMPLETED'`,
-    [userId]
-  );
-  const { rows: borrowedCount } = await db.query(
-    `SELECT COUNT(*) as count FROM transactions WHERE receiver_id = $1 AND sharing_type = 'BORROW'`,
-    [userId]
-  );
-  const { rows: exchangedCount } = await db.query(
-    `SELECT COUNT(*) as count FROM transactions WHERE (provider_id = $1 OR receiver_id = $1) AND sharing_type = 'EXCHANGE' AND status = 'COMPLETED'`,
-    [userId]
-  );
-  const { rows: activeListings } = await db.query(
-    `SELECT COUNT(*) as count FROM resources WHERE posted_by_id = $1 AND status = 'AVAILABLE'`,
-    [userId]
-  );
-  const { rows: incomingReqs } = await db.query(
-    `SELECT COUNT(*) as count FROM requests req
-     JOIN resources res ON req.resource_id = res.id
-     WHERE res.posted_by_id = $1 AND req.status = 'PENDING'`,
-    [userId]
-  );
+  const itemsBorrowedCount = await Transaction.countDocuments({
+    receiver: userId,
+    sharingType: 'BORROW'
+  });
+
+  const itemsExchangedCount = await Transaction.countDocuments({
+    $or: [{ provider: userId }, { receiver: userId }],
+    sharingType: 'EXCHANGE',
+    status: 'COMPLETED'
+  });
+
+  const activeListings = await Resource.countDocuments({
+    postedBy: userId,
+    status: 'AVAILABLE'
+  });
+
+  const userResourceIds = await Resource.find({ postedBy: userId }).distinct('_id');
+  const incomingRequests = await Request.countDocuments({
+    resource: { $in: userResourceIds },
+    status: 'PENDING'
+  });
 
   // User Badges
-  const { rows: badges } = await db.query(
-    `SELECT badge_id as id, title, icon, description, earned_at as earnedAt
-     FROM user_badges WHERE user_id = $1 ORDER BY earned_at DESC`,
-    [userId]
-  );
+  const badgesDoc = await UserBadge.find({ user: userId }).sort({ createdAt: -1 });
+  const badges = badgesDoc.map((b) => ({
+    id: b.badgeId || b._id,
+    title: b.title,
+    icon: b.icon,
+    description: b.description,
+    earnedAt: b.earnedAt
+  }));
 
   // Rewards History
-  const { rows: rewardsHistory } = await db.query(
-    `SELECT id, action, points, date, type
-     FROM rewards_history WHERE user_id = $1 ORDER BY date DESC, created_at DESC`,
-    [userId]
-  );
+  const rewardsDoc = await RewardHistory.find({ user: userId }).sort({ date: -1, createdAt: -1 });
+  const rewardsHistory = rewardsDoc.map((r) => ({
+    id: r._id,
+    action: r.action,
+    points: r.points,
+    date: r.date,
+    type: r.type
+  }));
 
-  const itemsShared = parseInt(sharedCount[0]?.count || 0, 10);
-  const itemsBorrowed = parseInt(borrowedCount[0]?.count || 0, 10);
-  const itemsExchanged = parseInt(exchangedCount[0]?.count || 0, 10);
+  const itemsShared = rawUser._id === 'usr_001' ? Math.max(itemsSharedCount, 14) : itemsSharedCount;
+  const itemsBorrowed = rawUser._id === 'usr_001' ? Math.max(itemsBorrowedCount, 6) : itemsBorrowedCount;
+  const itemsExchanged = rawUser._id === 'usr_001' ? Math.max(itemsExchangedCount, 3) : itemsExchangedCount;
 
   return {
-    id: rawUser.id,
+    id: rawUser._id,
     name: rawUser.name,
     email: rawUser.email,
     department: rawUser.department || 'ADTU Student',
     community: rawUser.community || 'ADTU - Main Campus (Panikhaiti)',
     hostel: rawUser.hostel || 'Campus Residence',
     avatar: rawUser.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
-    rePoints: rawUser.re_points ?? 0,
+    rePoints: rawUser.rePoints ?? 0,
     level: rawUser.level || 'Campus Champion',
-    joinedDate: rawUser.joined_date || 'March 2026',
+    joinedDate: rawUser.joinedDate || 'March 2026',
     rating: rawUser.rating ?? 5.0,
-    verifiedStudent: Boolean(rawUser.verified_student),
+    verifiedStudent: Boolean(rawUser.verifiedStudent),
     stats: {
-      itemsShared: Math.max(itemsShared, rawUser.id === 'usr_001' ? 14 : itemsShared),
-      itemsBorrowed: Math.max(itemsBorrowed, rawUser.id === 'usr_001' ? 6 : itemsBorrowed),
-      itemsExchanged: Math.max(itemsExchanged, rawUser.id === 'usr_001' ? 3 : itemsExchanged),
-      co2SavedKg: parseFloat((Math.max(itemsShared, rawUser.id === 'usr_001' ? 14 : itemsShared) * 3.1).toFixed(1)),
-      activeListings: parseInt(activeListings[0]?.count || 0, 10),
-      incomingRequests: parseInt(incomingReqs[0]?.count || 0, 10)
+      itemsShared,
+      itemsBorrowed,
+      itemsExchanged,
+      co2SavedKg: parseFloat((itemsShared * 3.1).toFixed(1)),
+      activeListings,
+      incomingRequests
     },
     badges: badges.length > 0 ? badges : [
       { id: 'b_welcome', title: 'New Pioneer', icon: '🌱', description: 'Joined ReConnect Community', earnedAt: 'Recent' }
@@ -97,9 +101,11 @@ export const authController = {
         return res.status(400).json({ message: 'Full name, email, and password are required.' });
       }
 
+      const normalizedEmail = email.toLowerCase().trim();
+
       // Check existing user
-      const { rows: existing } = await db.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase().trim()]);
-      if (existing.length > 0) {
+      const existing = await User.findOne({ email: normalizedEmail });
+      if (existing) {
         return res.status(409).json({ message: 'An account with this campus email already exists.' });
       }
 
@@ -109,59 +115,44 @@ export const authController = {
       const joinedDate = new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
       const initialPoints = 50; // Welcome points
 
-      await db.query(
-        `INSERT INTO users (id, name, email, password, department, community, hostel, avatar, re_points, level, joined_date, rating, verified_student, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
-        [
-          userId,
-          userName.trim(),
-          email.toLowerCase().trim(),
-          hashedPassword,
-          department || 'Undergraduate Student',
-          community || 'ADTU - Main Campus (Panikhaiti)',
-          hostel || '',
-          avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
-          initialPoints,
-          'Campus Pioneer',
-          joinedDate,
-          5.0,
-          true,
-          now,
-          now
-        ]
-      );
+      const newUser = await User.create({
+        _id: userId,
+        name: userName.trim(),
+        email: normalizedEmail,
+        password: hashedPassword,
+        department: department || 'Undergraduate Student',
+        community: community || 'ADTU - Main Campus (Panikhaiti)',
+        hostel: hostel || '',
+        avatar: avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+        rePoints: initialPoints,
+        level: 'Campus Pioneer',
+        joinedDate,
+        rating: 5.0,
+        verifiedStudent: true
+      });
 
       // Welcome reward entry
-      await db.query(
-        `INSERT INTO rewards_history (id, user_id, action, points, date, type, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          generateId('rw'),
-          userId,
-          'Welcome to ReConnect Bonus',
-          initialPoints,
-          now.split('T')[0],
-          'earn',
-          now
-        ]
-      );
+      await RewardHistory.create({
+        _id: generateId('rw'),
+        user: newUser._id,
+        action: 'Welcome to ReConnect Bonus',
+        points: initialPoints,
+        date: now.split('T')[0],
+        type: 'earn'
+      });
 
       // Welcome badge
-      await db.query(
-        `INSERT INTO user_badges (id, user_id, badge_id, title, icon, description, earned_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          generateId('bdg'),
-          userId,
-          'b_welcome',
-          'Eco-Pioneer',
-          '🌱',
-          'Joined the campus circular economy network',
-          joinedDate
-        ]
-      );
+      await UserBadge.create({
+        _id: generateId('bdg'),
+        user: newUser._id,
+        badgeId: 'b_welcome',
+        title: 'Eco-Pioneer',
+        icon: '🌱',
+        description: 'Joined the campus circular economy network',
+        earnedAt: joinedDate
+      });
 
-      const user = await getFullUserProfile(userId);
+      const user = await getFullUserProfile(newUser._id);
       const token = generateToken({ id: user.id, email: user.email });
 
       return res.status(201).json({
@@ -183,21 +174,17 @@ export const authController = {
         return res.status(400).json({ message: 'Email and password are required.' });
       }
 
-      const { rows } = await db.query(
-        'SELECT id, password FROM users WHERE LOWER(email) = LOWER($1)',
-        [email.trim()]
-      );
-
-      if (rows.length === 0) {
+      const userDoc = await User.findOne({ email: email.toLowerCase().trim() }).select('+password');
+      if (!userDoc) {
         return res.status(401).json({ message: 'Invalid email or password.' });
       }
 
-      const match = await bcrypt.compare(password, rows[0].password);
+      const match = await bcrypt.compare(password, userDoc.password);
       if (!match) {
         return res.status(401).json({ message: 'Invalid email or password.' });
       }
 
-      const user = await getFullUserProfile(rows[0].id);
+      const user = await getFullUserProfile(userDoc._id);
       const token = generateToken({ id: user.id, email: user.email });
 
       return res.json({
@@ -225,3 +212,4 @@ export const authController = {
   }
 };
 
+export default authController;

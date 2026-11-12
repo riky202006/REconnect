@@ -1,4 +1,4 @@
-import db from '../config/db.js';
+import { User, Transaction } from '../models/index.js';
 import { getFullUserProfile } from './authController.js';
 
 export const userController = {
@@ -16,19 +16,15 @@ export const userController = {
   updateProfile: async (req, res, next) => {
     try {
       const { name, department, community, hostel, avatar } = req.body;
-      const now = new Date().toISOString();
 
-      await db.query(
-        `UPDATE users
-         SET name = COALESCE($1, name),
-             department = COALESCE($2, department),
-             community = COALESCE($3, community),
-             hostel = COALESCE($4, hostel),
-             avatar = COALESCE($5, avatar),
-             updated_at = $6
-         WHERE id = $7`,
-        [name, department, community, hostel, avatar, now, req.user.id]
-      );
+      const updateData = {};
+      if (name !== undefined) updateData.name = name;
+      if (department !== undefined) updateData.department = department;
+      if (community !== undefined) updateData.community = community;
+      if (hostel !== undefined) updateData.hostel = hostel;
+      if (avatar !== undefined) updateData.avatar = avatar;
+
+      await User.findByIdAndUpdate(req.user.id, updateData);
 
       const updated = await getFullUserProfile(req.user.id);
       return res.json({
@@ -44,28 +40,42 @@ export const userController = {
   // GET /api/users/leaderboard
   getLeaderboard: async (req, res, next) => {
     try {
-      const { period = 'all' } = req.query;
+      const users = await User.find()
+        .sort({ rePoints: -1 })
+        .limit(20);
 
-      const { rows } = await db.query(
-        `SELECT u.id, u.name, u.avatar, u.department, u.re_points as points, u.level,
-                (SELECT COUNT(*) FROM transactions t WHERE t.provider_id = u.id AND t.status = 'COMPLETED') as items_shared
-         FROM users u
-         ORDER BY u.re_points DESC
-         LIMIT 20`
+      const badges = [
+        'Eco Champion 🏆',
+        'Master Donor 🌟',
+        'Campus Star ⭐',
+        'Resource Guru 🔄',
+        'Green Leader 🌿',
+        'Helpful Hand 🤝',
+        'Community Hero 🛡️'
+      ];
+
+      const leaderboard = await Promise.all(
+        users.map(async (u, index) => {
+          const itemsSharedCount = await Transaction.countDocuments({
+            provider: u._id,
+            status: 'COMPLETED'
+          });
+
+          return {
+            rank: index + 1,
+            id: u._id,
+            name: u.name,
+            avatar: u.avatar,
+            department: u.department,
+            points: u.rePoints,
+            itemsShared: Math.max(
+              itemsSharedCount,
+              index === 0 ? 26 : index === 1 ? 21 : index === 2 ? 14 : 8
+            ),
+            badge: badges[index] || 'Eco Contributor ♻️'
+          };
+        })
       );
-
-      const badges = ['Eco Champion 🏆', 'Master Donor 🌟', 'Campus Star ⭐', 'Resource Guru 🔄', 'Green Leader 🌿', 'Helpful Hand 🤝', 'Community Hero 🛡️'];
-
-      const leaderboard = rows.map((r, index) => ({
-        rank: index + 1,
-        id: r.id,
-        name: r.name,
-        avatar: r.avatar,
-        department: r.department,
-        points: r.points,
-        itemsShared: Math.max(parseInt(r.items_shared || 0, 10), index === 0 ? 26 : index === 1 ? 21 : index === 2 ? 14 : 8),
-        badge: badges[index] || 'Eco Contributor ♻️'
-      }));
 
       return res.json(leaderboard);
     } catch (err) {
@@ -88,3 +98,4 @@ export const userController = {
   }
 };
 
+export default userController;

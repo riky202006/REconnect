@@ -8,6 +8,8 @@
     "dev:server": "npm --prefix backend run dev",
     "dev:frontend": "npm --prefix frontend run dev",
     "dev:client": "npm --prefix frontend run dev",
+    "test:backend": "npm --prefix backend test",
+    "test": "npm --prefix backend test",
     "start": "npm --prefix backend start"
   },
   "keywords": ["community", "neo-brutalism", "resource-sharing", "zero-waste"],

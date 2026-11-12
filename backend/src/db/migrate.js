@@ -1,33 +1,31 @@
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import db from '../config/db.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { connectDb, disconnectDb } from '../config/db.js';
+import {
+  User,
+  Resource,
+  Request,
+  Transaction,
+  UserBadge,
+  RewardHistory,
+  Notification,
+  CommunityInfo
+} from '../models/index.js';
 
 export async function runMigrations() {
-  console.log('Running database migrations...');
-  const schemaPath = path.resolve(__dirname, 'schema.sql');
-  const sql = fs.readFileSync(schemaPath, 'utf8');
+  console.log('Synchronizing MongoDB Atlas schemas & indexes...');
+  await connectDb();
 
-  // If using SQLite or PostgreSQL, exec runs whole script or statements
-  if (db.getDbEngine() === 'sqlite') {
-    await db.exec(sql);
-  } else {
-    // For PostgreSQL, execute commands
-    const statements = sql
-      .split(';')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
+  await Promise.all([
+    User.syncIndexes(),
+    Resource.syncIndexes(),
+    Request.syncIndexes(),
+    Transaction.syncIndexes(),
+    UserBadge.syncIndexes(),
+    RewardHistory.syncIndexes(),
+    Notification.syncIndexes(),
+    CommunityInfo.syncIndexes()
+  ]);
 
-    for (const statement of statements) {
-      await db.query(statement);
-    }
-  }
-
-  console.log('✓ Database schema up to date.');
+  console.log('✓ MongoDB Atlas indexes synchronized successfully.');
 }
 
 export default runMigrations;
-

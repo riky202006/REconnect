@@ -7,25 +7,27 @@ import transactionRoutes from './transactionRoutes.js';
 import notificationRoutes from './notificationRoutes.js';
 import communityRoutes from './communityRoutes.js';
 import uploadRoutes from './uploadRoutes.js';
-import db from '../config/db.js';
+import { db } from '../config/db.js';
 
 const router = Router();
 
 // Health check endpoint
-router.get('/health', async (req, res) => {
-  try {
-    const { rows } = await db.query('SELECT 1 as healthy');
+router.get('/health', (req, res) => {
+  const connected = db.isDbConnected();
+  if (connected) {
     return res.json({
       status: 'ok',
-      database: db.getDbEngine(),
-      databaseConnected: rows.length > 0,
+      database: 'mongodb',
+      databaseConnected: true,
       timestamp: new Date().toISOString()
     });
-  } catch (err) {
-    return res.status(500).json({
+  } else {
+    return res.status(503).json({
       status: 'error',
-      database: db.getDbEngine(),
-      message: err.message
+      database: 'mongodb',
+      databaseConnected: false,
+      message: 'MongoDB Atlas is not connected',
+      timestamp: new Date().toISOString()
     });
   }
 });
@@ -40,4 +42,3 @@ router.use('/community', communityRoutes);
 router.use('/upload', uploadRoutes);
 
 export default router;
-

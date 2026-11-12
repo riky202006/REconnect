@@ -1,5 +1,5 @@
 import { verifyToken } from '../utils/jwt.js';
-import db from '../config/db.js';
+import { User } from '../models/index.js';
 
 export async function authenticate(req, res, next) {
   try {
@@ -15,21 +15,29 @@ export async function authenticate(req, res, next) {
       return res.status(401).json({ message: 'Invalid or expired token.' });
     }
 
-    const { rows } = await db.query(
-      'SELECT id, name, email, department, community, hostel, avatar, re_points, level, joined_date, rating, verified_student FROM users WHERE id = $1',
-      [decoded.id]
-    );
+    const user = await User.findById(decoded.id);
 
-    if (rows.length === 0) {
+    if (!user) {
       return res.status(401).json({ message: 'User belonging to this token no longer exists.' });
     }
 
-    const user = rows[0];
     req.user = {
-      ...user,
-      rePoints: user.re_points,
-      joinedDate: user.joined_date,
-      verifiedStudent: Boolean(user.verified_student)
+      id: user._id,
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      department: user.department,
+      community: user.community,
+      hostel: user.hostel,
+      avatar: user.avatar,
+      rePoints: user.rePoints,
+      re_points: user.rePoints,
+      level: user.level,
+      joinedDate: user.joinedDate,
+      joined_date: user.joinedDate,
+      rating: user.rating,
+      verifiedStudent: Boolean(user.verifiedStudent),
+      verified_student: Boolean(user.verifiedStudent)
     };
 
     next();
@@ -49,23 +57,30 @@ export async function optionalAuthenticate(req, res, next) {
     const decoded = verifyToken(token);
 
     if (decoded && decoded.id) {
-      const { rows } = await db.query(
-        'SELECT id, name, email, department, community, hostel, avatar, re_points, level, joined_date, rating, verified_student FROM users WHERE id = $1',
-        [decoded.id]
-      );
-      if (rows.length > 0) {
-        const user = rows[0];
+      const user = await User.findById(decoded.id);
+      if (user) {
         req.user = {
-          ...user,
-          rePoints: user.re_points,
-          joinedDate: user.joined_date,
-          verifiedStudent: Boolean(user.verified_student)
+          id: user._id,
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          department: user.department,
+          community: user.community,
+          hostel: user.hostel,
+          avatar: user.avatar,
+          rePoints: user.rePoints,
+          re_points: user.rePoints,
+          level: user.level,
+          joinedDate: user.joinedDate,
+          joined_date: user.joinedDate,
+          rating: user.rating,
+          verifiedStudent: Boolean(user.verifiedStudent),
+          verified_student: Boolean(user.verifiedStudent)
         };
       }
     }
-  } catch (err) {
-    // Ignore in optional
+  } catch {
+    // Ignore in optional authentication
   }
   next();
 }
-
