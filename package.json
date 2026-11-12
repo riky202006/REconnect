@@ -3,10 +3,12 @@
   "version": "1.0.0",
   "description": "ReConnect - Community Resource Sharing Platform",
   "scripts": {
-    "install:all": "npm install && npm --prefix client install && npm --prefix server install",
-    "dev:server": "npm --prefix server run dev",
-    "dev:client": "npm --prefix client run dev",
-    "start": "npm --prefix server start"
+    "install:all": "npm install && npm --prefix frontend install && npm --prefix backend install",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:server": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:client": "npm --prefix frontend run dev",
+    "start": "npm --prefix backend start"
   },
   "keywords": ["community", "neo-brutalism", "resource-sharing", "zero-waste"],
   "author": "ReConnect Team",
